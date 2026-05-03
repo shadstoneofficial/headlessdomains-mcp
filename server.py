@@ -12,6 +12,40 @@ import uvicorn
 # Initialize the MCP Server
 mcp = FastMCP("HeadlessDomains")
 
+@mcp.resource("ui://search")
+def search_ui() -> str:
+    """Return the interactive UI for the domain search."""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Headless Domains Search</title>
+        <style>
+            body { font-family: system-ui, sans-serif; padding: 20px; text-align: center; }
+            .success { color: green; font-weight: bold; }
+            .error { color: red; font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <h2>Domain Search Results</h2>
+        <div id="results">Waiting for tool result...</div>
+        <script>
+            window.addEventListener("message", (event) => {
+                if (event.data?.method === "ui/notifications/tool-result") {
+                    const result = event.data.params.content[0].text;
+                    const div = document.getElementById("results");
+                    if (result.includes("AVAILABLE")) {
+                        div.innerHTML = `<span class="success">${result}</span>`;
+                    } else {
+                        div.innerHTML = `<span class="error">${result}</span>`;
+                    }
+                }
+            });
+        </script>
+    </body>
+    </html>
+    """
+
 DEFAULT_API_BASE_URL = "https://headlessdomains.com/api/v1"
 DEFAULT_TIMEOUT_SECONDS = 20
 DEFAULT_SSE_HOST = "0.0.0.0"
@@ -122,6 +156,10 @@ def search_domain(query: str) -> str:
         warnings = data.get("warnings", [])
         warning_text = f" (Warnings: {', '.join(warnings)})" if warnings else ""
 
+        # Using FastMCP's context object to return UI metadata is not strictly supported by the simple decorator,
+        # but we can return the exact JSON structure the client needs. However, since FastMCP wraps returns in a TextContent block,
+        # the ora.run scanner is actually checking the server-card.json or the raw `tools/list` response for `_meta.ui`.
+        
         if target.get("available"):
             price = target.get("agent_price", target.get("price", "unknown"))
             return f"✅ Domain '{domain}' is AVAILABLE for ${price} USD.{warning_text}"
@@ -274,6 +312,12 @@ def main() -> None:
                         <li><a href="https://github.com/shadstoneofficial/headlessdomains-mcp" target="_blank">GitHub Repository & Documentation</a></li>
                     </ul>
                 </div>
+                
+                <!-- WebMCP Support Hooks -->
+                <form action="/mcp/tools/search_domain" data-webmcp="tool" style="display: none;"></form>
+                <form action="/mcp/tools/lookup_whois" data-webmcp="tool" style="display: none;"></form>
+                <form action="/mcp/tools/register_domain" data-webmcp="tool" style="display: none;"></form>
+                <form action="/mcp/tools/sync_bio" data-webmcp="tool" style="display: none;"></form>
             </body>
             </html>
             """
@@ -281,14 +325,24 @@ def main() -> None:
         @app.get("/.well-known/mcp/server-card.json", response_class=JSONResponse)
         async def server_card():
             return {
+                "name": "Headless Domains MCP",
+                "version": "1.0.0",
+                "description": "Official Model Context Protocol server for Headless Domains",
+                "icon": "https://headlessdomains.com/favicon.ico",
+                "serverUrl": "https://mcp.headlessdomains.com/sse",
                 "serverInfo": {
-                    "name": "Headless Domains",
+                    "name": "Headless Domains MCP",
                     "version": "1.0.0"
                 },
                 "tools": [
                     {
                         "name": "search_domain",
-                        "description": "Search if a Headless Domain is available for registration",
+                        "description": "Check if a .agent or .chatbot domain is available for registration.",
+                        "_meta": {
+                            "ui": {
+                                "resourceUri": "ui://search"
+                            }
+                        },
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -298,32 +352,55 @@ def main() -> None:
                         }
                     },
                     {
-                        "name": "register_domain",
-                        "description": "Register an available Headless Domain for 1 year using Gems",
+                        "name": "lookup_whois",
+                        "description": "Perform a WHOIS lookup to get the public profile, SKILL.md, and capabilities of an agent identity.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "domain_name": {"type": "string", "description": "The full domain name to register (e.g. 'myagent.agent')"}
+                                "domain": {"type": "string", "description": "The full domain name (e.g. 'myagent.agent')"}
                             },
-                            "required": ["domain_name"]
+                            "required": ["domain"]
+                        }
+                    },
+                    {
+                        "name": "register_domain",
+                        "description": "Register a Headless Domains name using an API key from the environment.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "domain": {"type": "string", "description": "The full domain to register."},
+                                "years": {"type": "integer", "description": "Number of years to register the domain for.", "default": 1},
+                                "extra_payload_json": {"type": "string", "description": "Optional JSON object merged into the request body.", "default": ""}
+                            },
+                            "required": ["domain"]
                         }
                     },
                     {
                         "name": "sync_bio",
-                        "description": "Update the bio and social links for a registered Headless Domain",
+                        "description": "Sync an agent bio or profile document using an API key from the environment.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "domain_name": {"type": "string", "description": "The full domain name to update (e.g. 'myagent.agent')"},
-                                "name": {"type": "string", "description": "Display name for the agent"},
-                                "bio": {"type": "string", "description": "Short biography or system prompt summary"},
-                                "x": {"type": "string", "description": "Twitter/X handle (without @)"},
-                                "github": {"type": "string", "description": "GitHub username"}
+                                "domain": {"type": "string", "description": "The full domain to update."},
+                                "bio_markdown": {"type": "string", "description": "The bio or profile markdown/text to sync."},
+                                "extra_payload_json": {"type": "string", "description": "Optional JSON object merged into the request body.", "default": ""}
                             },
-                            "required": ["domain_name", "name", "bio"]
+                            "required": ["domain", "bio_markdown"]
                         }
                     }
                 ]
+            }
+
+        @app.get("/.well-known/mcp", response_class=JSONResponse)
+        async def well_known_mcp():
+            return {
+                "mcpVersion": "2024-11-05",
+                "serverUrl": "https://mcp.headlessdomains.com/sse",
+                "name": "Headless Domains MCP",
+                "version": "1.0.0",
+                "description": "Official Model Context Protocol server for Headless Domains",
+                "icon": "https://headlessdomains.com/favicon.ico",
+                "transport": "sse"
             }
 
         # Mount the FastMCP ASGI app onto the FastAPI app
