@@ -217,6 +217,13 @@ def main() -> None:
     if port:
         mcp.settings.host = os.getenv("HOST", DEFAULT_SSE_HOST)
         mcp.settings.port = int(port)
+        
+        # Disable DNS rebinding protection to allow Railway and custom domains
+        if hasattr(mcp.settings, "transport_security"):
+            mcp.settings.transport_security.enable_dns_rebinding_protection = False
+            mcp.settings.transport_security.allowed_hosts = ["*"]
+            mcp.settings.transport_security.allowed_origins = ["*"]
+            
         mcp.run(transport=transport or "sse")
         return
 
