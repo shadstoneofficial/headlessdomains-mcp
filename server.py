@@ -326,12 +326,14 @@ def main() -> None:
         async def server_card():
             return {
                 "name": "Headless Domains MCP",
+                "displayName": "Headless Domains MCP",
                 "version": "1.0.0",
                 "description": "Official Model Context Protocol server for Headless Domains",
                 "icon": "https://headlessdomains.com/favicon.ico",
                 "serverUrl": "https://mcp.headlessdomains.com/sse",
                 "serverInfo": {
                     "name": "Headless Domains MCP",
+                    "displayName": "Headless Domains MCP",
                     "version": "1.0.0"
                 },
                 "tools": [
@@ -391,12 +393,42 @@ def main() -> None:
                 ]
             }
 
+        @app.get("/mcp.json", response_class=JSONResponse)
+        async def mcp_json():
+            return {
+                "name": "Headless Domains MCP",
+                "description": "Official Model Context Protocol server for Headless Domains",
+                "icon": "https://headlessdomains.com/favicon.ico",
+                "mcpServers": {
+                    "headlessdomains": {
+                        "command": "python",
+                        "args": ["server.py"]
+                    }
+                }
+            }
+
+        @app.get("/.well-known/ai-plugin.json", response_class=JSONResponse)
+        async def ai_plugin():
+            return {
+                "schema_version": "v1",
+                "name_for_human": "Headless Domains MCP",
+                "name_for_model": "headless_domains_mcp",
+                "description_for_human": "Official Model Context Protocol server for Headless Domains",
+                "description_for_model": "Allows AI agents to natively search for and register decentralized agent identities.",
+                "auth": {"type": "none"},
+                "api": {"type": "openapi", "url": "https://mcp.headlessdomains.com/openapi.json"},
+                "logo_url": "https://headlessdomains.com/favicon.ico",
+                "contact_email": "support@headlessdomains.com",
+                "legal_info_url": "https://headlessdomains.com/terms"
+            }
+
         @app.get("/.well-known/mcp", response_class=JSONResponse)
         async def well_known_mcp():
             return {
                 "mcpVersion": "2024-11-05",
                 "serverUrl": "https://mcp.headlessdomains.com/sse",
                 "name": "Headless Domains MCP",
+                "displayName": "Headless Domains MCP",
                 "version": "1.0.0",
                 "description": "Official Model Context Protocol server for Headless Domains",
                 "icon": "https://headlessdomains.com/favicon.ico",
