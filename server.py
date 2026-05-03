@@ -5,7 +5,7 @@ from typing import Any, Dict
 import requests
 from mcp.server.fastmcp import FastMCP
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
 
 # Initialize the MCP Server
@@ -267,6 +267,54 @@ def main() -> None:
             </body>
             </html>
             """
+
+        @app.get("/.well-known/mcp/server-card.json", response_class=JSONResponse)
+        async def server_card():
+            return {
+                "serverInfo": {
+                    "name": "Headless Domains",
+                    "version": "1.0.0"
+                },
+                "tools": [
+                    {
+                        "name": "search_domain",
+                        "description": "Search if a Headless Domain is available for registration",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": {"type": "string", "description": "The full domain name to search for (e.g. 'myagent.agent')"}
+                            },
+                            "required": ["query"]
+                        }
+                    },
+                    {
+                        "name": "register_domain",
+                        "description": "Register an available Headless Domain for 1 year using Gems",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "domain_name": {"type": "string", "description": "The full domain name to register (e.g. 'myagent.agent')"}
+                            },
+                            "required": ["domain_name"]
+                        }
+                    },
+                    {
+                        "name": "sync_bio",
+                        "description": "Update the bio and social links for a registered Headless Domain",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "domain_name": {"type": "string", "description": "The full domain name to update (e.g. 'myagent.agent')"},
+                                "name": {"type": "string", "description": "Display name for the agent"},
+                                "bio": {"type": "string", "description": "Short biography or system prompt summary"},
+                                "x": {"type": "string", "description": "Twitter/X handle (without @)"},
+                                "github": {"type": "string", "description": "GitHub username"}
+                            },
+                            "required": ["domain_name", "name", "bio"]
+                        }
+                    }
+                ]
+            }
 
         # Mount the FastMCP ASGI app onto the FastAPI app
         # This automatically exposes the /sse and /messages endpoints required by MCP clients
