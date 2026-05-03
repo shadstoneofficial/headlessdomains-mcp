@@ -270,6 +270,13 @@ def main() -> None:
 
         # Mount the FastMCP ASGI app onto the FastAPI app
         # This automatically exposes the /sse and /messages endpoints required by MCP clients
+        
+        # Disable DNS rebinding protection so custom domains (mcp.headlessdomains.com) don't get 421 Invalid Host header
+        if hasattr(mcp.settings, "transport_security"):
+            mcp.settings.transport_security.enable_dns_rebinding_protection = False
+            mcp.settings.transport_security.allowed_hosts = ["*"]
+            mcp.settings.transport_security.allowed_origins = ["*"]
+
         mcp_app = mcp.sse_app()
         app.mount("/", mcp_app)
 
