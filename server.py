@@ -4,6 +4,9 @@ from typing import Any, Dict
 
 import requests
 from mcp.server.fastmcp import FastMCP
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+import uvicorn
 
 # Initialize the MCP Server
 mcp = FastMCP("HeadlessDomains")
@@ -215,18 +218,66 @@ def main() -> None:
     transport = os.getenv("MCP_TRANSPORT")
 
     if port:
-        mcp.settings.host = os.getenv("HOST", DEFAULT_SSE_HOST)
-        mcp.settings.port = int(port)
-        
-        # Disable DNS rebinding protection to allow Railway and custom domains
-        if hasattr(mcp.settings, "transport_security"):
-            mcp.settings.transport_security.enable_dns_rebinding_protection = False
-            mcp.settings.transport_security.allowed_hosts = ["*"]
-            mcp.settings.transport_security.allowed_origins = ["*"]
-            
-        mcp.run(transport=transport or "sse")
+        # When running on Railway (or any hosted environment with a PORT),
+        # we wrap the FastMCP app in a FastAPI app so we can serve a custom HTML root page.
+        app = FastAPI(title="Headless Domains MCP")
+
+        @app.get("/", response_class=HTMLResponse)
+        async def root():
+            return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Headless Domains MCP</title>
+                <style>
+                    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 2rem; color: #333; }
+                    h1 { color: #1a1a1a; }
+                    .card { background: #f8f9fa; border-radius: 8px; padding: 1.5rem; margin-top: 2rem; border: 1px solid #e9ecef; }
+                    a { color: #0066cc; text-decoration: none; }
+                    a:hover { text-decoration: underline; }
+                    code { background: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.9em; }
+                </style>
+            </head>
+            <body>
+                <h1>🌐 Headless Domains MCP Server</h1>
+                <p>This is the official <a href="https://modelcontextprotocol.io/" target="_blank">Model Context Protocol (MCP)</a> server for <strong>Headless Domains</strong>.</p>
+                <p>It allows AI agents (like Claude, Cursor, and custom agentic frameworks) to natively search for and register decentralized agent identities.</p>
+                
+                <div class="card">
+                    <h2>🔌 How Agents Connect to This Server</h2>
+                    <p>The Model Context Protocol (MCP) provides two main ways for an AI agent to connect to this server:</p>
+                    
+                    <h3>1. Hosted Server (SSE) - 🌟 Recommended</h3>
+                    <p>This is the cloud-hosted web server you are currently looking at! It is the best method for widespread adoption because modern agents (like Cursor, Windsurf, or web-based AI tools) can connect directly over the internet without users needing to download or install any Python code.</p>
+                    <p><strong>Endpoint URL:</strong> <code>https://mcp.headlessdomains.com/sse</code></p>
+                    <p><em>Note: If the user wishes to register domains or sync bios, they must pass their <code>HEADLESSDOMAINS_API_KEY</code> as an environment variable or header when connecting their agent.</em></p>
+
+                    <h3>2. Local Process (stdio)</h3>
+                    <p>The AI agent literally runs Python on the user's laptop to start the server locally in the background. This is currently required for <strong>Claude Desktop</strong>. It is secure, but requires the user to install Python and clone the GitHub repository.</p>
+                    <p><strong>Command:</strong> <code>mcp run server.py</code></p>
+                </div>
+
+                <div class="card">
+                    <h2>🔗 Links & Resources</h2>
+                    <ul>
+                        <li><a href="https://headlessdomains.com" target="_blank">Headless Domains Official Website</a></li>
+                        <li><a href="https://github.com/shadstoneofficial/headlessdomains-mcp" target="_blank">GitHub Repository & Documentation</a></li>
+                    </ul>
+                </div>
+            </body>
+            </html>
+            """
+
+        # Mount the FastMCP ASGI app onto the FastAPI app
+        # This automatically exposes the /sse and /messages endpoints required by MCP clients
+        mcp_app = mcp.http_app(transport="sse")
+        app.mount("/", mcp_app)
+
+        # Run the combined app
+        uvicorn.run(app, host="0.0.0.0", port=int(port))
         return
 
+    # Fallback for local CLI usage (stdio)
     mcp.run(transport=transport or "stdio")
 
 
