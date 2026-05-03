@@ -5,6 +5,7 @@ from typing import Any, Dict
 import requests
 from mcp.server.fastmcp import FastMCP
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
 
@@ -221,6 +222,15 @@ def main() -> None:
         # When running on Railway (or any hosted environment with a PORT),
         # we wrap the FastMCP app in a FastAPI app so we can serve a custom HTML root page.
         app = FastAPI(title="Headless Domains MCP")
+
+        # Allow CORS for Smithery and other MCP registries
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
         @app.get("/", response_class=HTMLResponse)
         async def root():
