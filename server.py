@@ -270,7 +270,7 @@ def main() -> None:
 
         # Mount the FastMCP ASGI app onto the FastAPI app
         # This automatically exposes the /sse and /messages endpoints required by MCP clients
-        mcp_app = mcp.http_app(transport="sse")
+        mcp_app = mcp.sse_app()
         app.mount("/", mcp_app)
 
         # Run the combined app
