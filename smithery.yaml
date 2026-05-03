@@ -1,0 +1,9 @@
+startCommand:
+  type: stdio
+  config:
+    command: python
+    args:
+      - server.py
+name: "Headless Domains"
+description: "Official Model Context Protocol server for Headless Domains. Allows AI agents to natively search for and register decentralized agent identities."
+icon: "https://headlessdomains.com/favicon.ico"

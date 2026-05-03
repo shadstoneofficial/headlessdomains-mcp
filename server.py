@@ -46,6 +46,38 @@ def search_ui() -> str:
     </html>
     """
 
+@mcp.resource("ui://whois")
+def whois_ui() -> str:
+    """Return the interactive UI for the WHOIS lookup."""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Agent WHOIS Profile</title>
+        <style>
+            body { font-family: system-ui, sans-serif; padding: 20px; }
+            .card { background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            h2 { margin-top: 0; color: #333; }
+            pre { background: #eee; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>🤖 Agent Identity Profile</h2>
+            <div id="results">Waiting for WHOIS data...</div>
+        </div>
+        <script>
+            window.addEventListener("message", (event) => {
+                if (event.data?.method === "ui/notifications/tool-result") {
+                    const result = event.data.params.content[0].text;
+                    document.getElementById("results").innerHTML = `<pre>${result}</pre>`;
+                }
+            });
+        </script>
+    </body>
+    </html>
+    """
+
 DEFAULT_API_BASE_URL = "https://headlessdomains.com/api/v1"
 DEFAULT_TIMEOUT_SECONDS = 20
 DEFAULT_SSE_HOST = "0.0.0.0"
@@ -356,6 +388,11 @@ def main() -> None:
                     {
                         "name": "lookup_whois",
                         "description": "Perform a WHOIS lookup to get the public profile, SKILL.md, and capabilities of an agent identity.",
+                        "_meta": {
+                            "ui": {
+                                "resourceUri": "ui://whois"
+                            }
+                        },
                         "inputSchema": {
                             "type": "object",
                             "properties": {
