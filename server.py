@@ -12,7 +12,6 @@ import uvicorn
 # Initialize the MCP Server
 mcp = FastMCP(
     "HeadlessDomains",
-    version="1.0.0",
     instructions="Use this server to search for available .agent domains, look up WHOIS records for existing agent domains, and register new domains via MPP."
 )
 
