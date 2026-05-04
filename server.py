@@ -326,6 +326,12 @@ def main() -> None:
                 <p>This is the official <a href="https://modelcontextprotocol.io/" target="_blank">Model Context Protocol (MCP)</a> server for <strong>Headless Domains</strong>.</p>
                 <p>It allows AI agents (like Claude, Cursor, and custom agentic frameworks) to natively search for and register decentralized agent identities.</p>
                 
+                <div style="background-color: #eef7e5; border-left: 4px solid #52a024; padding: 10px 15px; margin: 20px 0; border-radius: 4px;">
+                    <strong>✨ Auto-discovery enabled:</strong> <code>https://mcp.headlessdomains.com/.well-known/mcp</code>
+                    <br>
+                    <small>Links: <a href="/.well-known/mcp">Server Card</a> | <a href="/.well-known/mcp.json">JSON</a></small>
+                </div>
+                
                 <div class="card">
                     <h2>🔌 How Agents Connect to This Server</h2>
                     <p>The Model Context Protocol (MCP) provides two main ways for an AI agent to connect to this server:</p>
