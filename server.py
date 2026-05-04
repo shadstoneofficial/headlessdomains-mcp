@@ -462,18 +462,31 @@ def main() -> None:
                 "legal_info_url": "https://headlessdomains.com/terms"
             }
 
+        def get_mcp_discovery_payload():
+            return {
+                "name": "Headless Domains .agent",
+                "description": "The identity standard for autonomous agents. Register, manage, and sync .agent domains.",
+                "version": "1.0.0",
+                "mcp_version": "2025-11",
+                "server_url": "https://mcp.headlessdomains.com/sse",
+                "capabilities": ["tools"],
+                "tools": ["search_domain", "lookup_whois", "register_domain", "sync_bio"],
+                "homepage": "https://headlessdomains.com",
+                "documentation": "https://headlessdomains.com/docs",
+                "icon": "https://headlessdomains.com/icon.png",
+                "author": {
+                    "name": "Headless Domains",
+                    "url": "https://headlessdomains.com"
+                }
+            }
+
         @app.get("/.well-known/mcp", response_class=JSONResponse)
         async def well_known_mcp():
-            return {
-                "mcpVersion": "2024-11-05",
-                "serverUrl": "https://mcp.headlessdomains.com/sse",
-                "name": "Headless Domains MCP",
-                "displayName": "Headless Domains MCP",
-                "version": "1.0.0",
-                "description": "Official Model Context Protocol server for Headless Domains",
-                "icon": "https://headlessdomains.com/favicon.ico",
-                "transport": "sse"
-            }
+            return get_mcp_discovery_payload()
+
+        @app.get("/.well-known/mcp.json", response_class=JSONResponse)
+        async def well_known_mcp_json():
+            return get_mcp_discovery_payload()
 
         # Mount the FastMCP ASGI app onto the FastAPI app
         # This automatically exposes the /sse and /messages endpoints required by MCP clients
