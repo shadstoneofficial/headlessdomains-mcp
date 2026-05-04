@@ -10,7 +10,11 @@ from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
 
 # Initialize the MCP Server
-mcp = FastMCP("HeadlessDomains")
+mcp = FastMCP(
+    "HeadlessDomains",
+    version="1.0.0",
+    instructions="Use this server to search for available .agent domains, look up WHOIS records for existing agent domains, and register new domains via MPP."
+)
 
 @mcp.resource("ui://search")
 def search_ui() -> str:
@@ -169,10 +173,10 @@ def _request(
 @mcp.tool()
 def search_domain(query: str) -> str:
     """
-    Check if a .agent or .chatbot domain is available for registration.
+    Search for available decentralized .agent or .chatbot domains across the Headless Domains ecosystem.
 
     Args:
-        query: The domain name to search (e.g. "myagent", "foo.agent").
+        query: The domain name or keyword to search for (e.g. 'janice' or 'janice.agent').
     """
     try:
         data = _request("GET", "/domains/search", params={"q": query})
@@ -208,7 +212,7 @@ def lookup_whois(domain: str) -> dict:
     Perform a WHOIS lookup to get the public profile, SKILL.md, and capabilities of an agent identity.
 
     Args:
-        domain: The full domain name (e.g. "myagent.agent").
+        domain: The full domain name to lookup (e.g. 'myagent.agent').
     """
     try:
         return _request("GET", f"/lookup/{domain}")
@@ -226,9 +230,9 @@ def register_domain(
     Register a Headless Domains name using an API key from the environment.
 
     Args:
-        domain: The full domain to register.
+        domain: The full domain name to register (e.g. 'myagent.agent').
         years: Number of years to register the domain for.
-        extra_payload_json: Optional JSON object merged into the request body.
+        extra_payload_json: Optional JSON string merged into the request body.
     """
     try:
         namespace = domain.split(".")[-1] if "." in domain else "agent"
@@ -261,9 +265,9 @@ def sync_bio(
     Sync an agent bio or profile document using an API key from the environment.
 
     Args:
-        domain: The full domain to update.
-        bio_markdown: The bio or profile markdown/text to sync.
-        extra_payload_json: Optional JSON object merged into the request body.
+        domain: The full domain name to update (e.g. 'myagent.agent').
+        bio_markdown: The bio or profile markdown/text to sync to the domain.
+        extra_payload_json: Optional JSON string merged into the request body.
     """
     try:
         payload = {
@@ -371,7 +375,7 @@ def main() -> None:
                 "tools": [
                     {
                         "name": "search_domain",
-                        "description": "Check if a .agent or .chatbot domain is available for registration.",
+                        "description": "Search for available decentralized .agent or .chatbot domains across the Headless Domains ecosystem.",
                         "_meta": {
                             "ui": {
                                 "resourceUri": "ui://search"
@@ -380,7 +384,7 @@ def main() -> None:
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "query": {"type": "string", "description": "The full domain name to search for (e.g. 'myagent.agent')"}
+                                "query": {"type": "string", "description": "The domain name or keyword to search for (e.g. 'janice' or 'janice.agent')."}
                             },
                             "required": ["query"]
                         }
@@ -396,7 +400,7 @@ def main() -> None:
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "domain": {"type": "string", "description": "The full domain name (e.g. 'myagent.agent')"}
+                                "domain": {"type": "string", "description": "The full domain name to lookup (e.g. 'myagent.agent')."}
                             },
                             "required": ["domain"]
                         }
@@ -407,9 +411,9 @@ def main() -> None:
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "domain": {"type": "string", "description": "The full domain to register."},
+                                "domain": {"type": "string", "description": "The full domain name to register (e.g. 'myagent.agent')."},
                                 "years": {"type": "integer", "description": "Number of years to register the domain for.", "default": 1},
-                                "extra_payload_json": {"type": "string", "description": "Optional JSON object merged into the request body.", "default": ""}
+                                "extra_payload_json": {"type": "string", "description": "Optional JSON string merged into the request body.", "default": ""}
                             },
                             "required": ["domain"]
                         }
@@ -420,9 +424,9 @@ def main() -> None:
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "domain": {"type": "string", "description": "The full domain to update."},
-                                "bio_markdown": {"type": "string", "description": "The bio or profile markdown/text to sync."},
-                                "extra_payload_json": {"type": "string", "description": "Optional JSON object merged into the request body.", "default": ""}
+                                "domain": {"type": "string", "description": "The full domain name to update (e.g. 'myagent.agent')."},
+                                "bio_markdown": {"type": "string", "description": "The bio or profile markdown/text to sync to the domain."},
+                                "extra_payload_json": {"type": "string", "description": "Optional JSON string merged into the request body.", "default": ""}
                             },
                             "required": ["domain", "bio_markdown"]
                         }
