@@ -1,5 +1,54 @@
 # Headless Domains MCP Server
 
+> **ChatGPT Plugin Extension MVP:** this branch includes an isolated, read-only plugin server at `plugin_server.py`. It does not replace or modify the legacy `server.py` runtime.
+
+## ChatGPT Plugin Extension MVP
+
+The new server provides:
+
+- `lookup_name`
+- `check_availability`
+- `list_my_names`
+- `get_records`
+- a global sidebar entrypoint (`headlessdomains.app`)
+- a thread-side name inspector (`headlessdomains.name_panel`)
+- desktop composer mention search
+- a versioned MCP App at `ui://headlessdomains/app-v1`
+- streamable HTTP at `/mcp`
+
+It is read-only. Registration, renewal, payment, record changes, MCP Events, and public deployment are intentionally excluded.
+
+### Safe local start
+
+Fixture mode is the default and makes no production API requests:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+HEADLESSDOMAINS_DATA_MODE=fixture .venv/bin/python plugin_server.py
+```
+
+Then connect MCP Inspector to `http://127.0.0.1:8787/mcp`.
+
+Production read-only lookup and availability can be enabled explicitly:
+
+```bash
+HEADLESSDOMAINS_DATA_MODE=production .venv/bin/python plugin_server.py
+```
+
+See:
+
+- [`docs/chatgpt-developer-mode.md`](docs/chatgpt-developer-mode.md)
+- [`docs/production-wiring.md`](docs/production-wiring.md)
+- [`docs/sdk-doc-mismatches.md`](docs/sdk-doc-mismatches.md)
+- [`docs/evaluation-prompts.md`](docs/evaluation-prompts.md)
+
+### Test
+
+```bash
+.venv/bin/python -m pytest -q
+```
+
 Official Model Context Protocol (MCP) server for Headless Domains. This server exposes Headless Domains API operations to MCP-compatible clients such as Claude Desktop, Cursor, and Windsurf.
 
 ## Features
