@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HeadlessDomains</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --bg: #f4f5f7;
+        --panel: #ffffff;
+        --text: #15171a;
+        --muted: #68707b;
+        --border: #dfe3e8;
+        --accent: #111827;
+        --accent-text: #ffffff;
+        --good: #0a7d47;
+        --bad: #aa2e25;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #111315;
+          --panel: #1a1d20;
+          --text: #f5f7fa;
+          --muted: #a9b0ba;
+          --border: #343940;
+          --accent: #f3f4f6;
+          --accent-text: #111827;
+          --good: #48d597;
+          --bad: #ff8c84;
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); }
+      main { min-height: 100vh; padding: 24px; }
+      .shell { width: min(1080px, 100%); margin: 0 auto; }
+      header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+      h1 { font-size: clamp(1.6rem, 4vw, 2.3rem); margin: 0; letter-spacing: -0.04em; }
+      h2 { margin: 0 0 12px; font-size: 1.05rem; }
+      p { margin: 0; }
+      .subtle { color: var(--muted); font-size: 0.9rem; }
+      .badge { border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px; font-size: 0.76rem; white-space: nowrap; }
+      .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+      button, input { font: inherit; }
+      button { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 10px; padding: 9px 13px; cursor: pointer; }
+      button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 650; }
+      button:disabled { opacity: 0.55; cursor: wait; }
+      .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
+      form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+      input { width: 100%; border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 10px; padding: 11px 12px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+      .result { text-align: left; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .available { color: var(--good); }
+      .unavailable { color: var(--bad); }
+      dl { display: grid; grid-template-columns: minmax(110px, auto) 1fr; gap: 8px 14px; margin: 0; }
+      dt { color: var(--muted); }
+      dd { margin: 0; overflow-wrap: anywhere; }
+      ul { margin: 0; padding-left: 20px; }
+      pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8rem; margin: 0; }
+      .warning { border-left: 3px solid #d97706; padding-left: 10px; color: var(--muted); margin-top: 12px; }
+      .empty { color: var(--muted); padding: 16px 0; }
+      [hidden] { display: none !important; }
+      @media (max-width: 520px) {
+        main { padding: 16px; }
+        header { flex-direction: column; }
+        form { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="shell">
+        <header>
+          <div>
+            <h1>HeadlessDomains</h1>
+            <p class="subtle">Resolve and inspect agent-native names without leaving chat.</p>
+          </div>
+          <span id="mode" class="badge">connecting</span>
+        </header>
+
+        <nav class="tabs" aria-label="Views">
+          <button id="search-tab" class="primary" type="button">Search</button>
+          <button id="portfolio-tab" type="button">My names</button>
+        </nav>
+
+        <section id="search-view">
+          <div class="card">
+            <form id="search-form">
+              <input id="query" name="query" placeholder="Search alice or alice.agent" autocomplete="off" required />
+              <button id="search-button" class="primary" type="submit">Check name</button>
+            </form>
+          </div>
+          <div id="availability"></div>
+          <div id="details"></div>
+        </section>
+
+        <section id="portfolio-view" hidden>
+          <div class="card">
+            <h2>Connected portfolio</h2>
+            <p class="subtle">Account data is loaded through the MCP server. No credential is exposed to this view.</p>
+          </div>
+          <div id="portfolio"></div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module">
+      const $ = (selector) => document.querySelector(selector);
+      const modeEl = $("#mode");
+      const searchView = $("#search-view");
+      const portfolioView = $("#portfolio-view");
+      const searchTab = $("#search-tab");
+      const portfolioTab = $("#portfolio-tab");
+      const searchForm = $("#search-form");
+      const searchButton = $("#search-button");
+      const availabilityEl = $("#availability");
+      const detailsEl = $("#details");
+      const portfolioEl = $("#portfolio");
+
+      let rpcId = 0;
+      const pending = new Map();
+
+      const notify = (method, params) => {
+        window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
+      };
+
+      const request = (method, params) => new Promise((resolve, reject) => {
+        const id = ++rpcId;
+        pending.set(id, { resolve, reject });
+        window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+      });
+
+      const structured = (value) => value?.structuredContent ?? value?.structured_content ?? {};
+      const clear = (element) => { while (element.firstChild) element.removeChild(element.firstChild); };
+      const text = (tag, value, className) => {
+        const node = document.createElement(tag);
+        node.textContent = value == null ? "—" : String(value);
+        if (className) node.className = className;
+        return node;
+      };
+
+      const addWarnings = (parent, warnings = []) => {
+        warnings.forEach((warning) => parent.appendChild(text("p", warning, "warning")));
+      };
+
+      const callTool = async (name, args = {}) => {
+        await bridgeReady;
+        return structured(await request("tools/call", { name, arguments: args }));
+      };
+
+      const renderAvailability = (result) => {
+        clear(availabilityEl);
+        const grid = document.createElement("div");
+        grid.className = "grid";
+        (result.matches || []).forEach((item) => {
+          const card = document.createElement("div");
+          card.className = "card";
+          const button = document.createElement("button");
+          button.className = "result";
+          button.type = "button";
+          const name = text("strong", item.name);
+          const status = text("span", item.available ? "Available" : item.status, item.available ? "available" : "unavailable");
+          button.append(name, status);
+          button.addEventListener("click", () => inspectName(item.name));
+          card.appendChild(button);
+          if (item.registrationPrice) {
+            card.appendChild(text("p", `${item.registrationPrice.amount} ${item.registrationPrice.currency} / year`, "subtle"));
+          }
+          if (item.reason) card.appendChild(text("p", item.reason, "subtle"));
+          grid.appendChild(card);
+        });
+        availabilityEl.appendChild(grid);
+        addWarnings(availabilityEl, result.warnings);
+      };
+
+      const inspectName = async (name) => {
+        clear(detailsEl);
+        detailsEl.appendChild(text("div", `Loading ${name}…`, "card subtle"));
+        try {
+          const [lookup, records] = await Promise.all([
+            callTool("lookup_name", { name }),
+            callTool("get_records", { name }),
+          ]);
+          clear(detailsEl);
+          const summary = document.createElement("section");
+          summary.className = "card";
+          summary.appendChild(text("h2", lookup.normalizedName || name));
+          const list = document.createElement("dl");
+          const pairs = [
+            ["Status", lookup.status],
+            ["Resolver", lookup.resolver?.status],
+            ["Owner", lookup.owner?.displayName],
+            ["Capabilities", (lookup.capabilities || []).map((item) => item.name).join(", ") || "None published"],
+            ["Endpoints", (lookup.endpoints || []).map((item) => `${item.kind}: ${item.url}`).join("\n") || "None published"],
+          ];
+          pairs.forEach(([label, value]) => { list.append(text("dt", label), text("dd", value)); });
+          summary.appendChild(list);
+          addWarnings(summary, lookup.warnings);
+          detailsEl.appendChild(summary);
+
+          const recordCard = document.createElement("section");
+          recordCard.className = "card";
+          recordCard.appendChild(text("h2", "Records"));
+          recordCard.appendChild(text("pre", JSON.stringify(records.records || [], null, 2)));
+          addWarnings(recordCard, records.warnings);
+          detailsEl.appendChild(recordCard);
+        } catch (error) {
+          clear(detailsEl);
+          detailsEl.appendChild(text("div", `Could not inspect ${name}: ${error?.message || error}`, "card unavailable"));
+        }
+      };
+
+      const loadPortfolio = async () => {
+        clear(portfolioEl);
+        portfolioEl.appendChild(text("div", "Loading portfolio…", "card subtle"));
+        try {
+          const result = await callTool("list_my_names", { limit: 25 });
+          clear(portfolioEl);
+          if (result.authRequired) {
+            const card = document.createElement("div");
+            card.className = "card";
+            card.append(text("h2", "Account connection required"), text("p", result.message, "subtle"));
+            portfolioEl.appendChild(card);
+            return;
+          }
+          if (!(result.names || []).length) {
+            portfolioEl.appendChild(text("div", "No names found.", "card empty"));
+            return;
+          }
+          const grid = document.createElement("div");
+          grid.className = "grid";
+          result.names.forEach((item) => {
+            const card = document.createElement("div");
+            card.className = "card";
+            const button = document.createElement("button");
+            button.className = "result";
+            button.append(text("strong", item.name), text("span", item.status, "available"));
+            button.addEventListener("click", () => {
+              showView("search");
+              $("#query").value = item.name;
+              inspectName(item.name);
+            });
+            card.append(button, text("p", item.expiresAt ? `Expires ${item.expiresAt}` : "Expiry not published", "subtle"));
+            grid.appendChild(card);
+          });
+          portfolioEl.appendChild(grid);
+          if (result.message) portfolioEl.appendChild(text("p", result.message, "warning"));
+        } catch (error) {
+          clear(portfolioEl);
+          portfolioEl.appendChild(text("div", `Could not load portfolio: ${error?.message || error}`, "card unavailable"));
+        }
+      };
+
+      const showView = (view) => {
+        const portfolio = view === "portfolio";
+        searchView.hidden = portfolio;
+        portfolioView.hidden = !portfolio;
+        searchTab.classList.toggle("primary", !portfolio);
+        portfolioTab.classList.toggle("primary", portfolio);
+        if (portfolio) loadPortfolio();
+      };
+
+      window.addEventListener("message", (event) => {
+        if (event.source !== window.parent) return;
+        const message = event.data;
+        if (!message || message.jsonrpc !== "2.0") return;
+        if (typeof message.id === "number") {
+          const handler = pending.get(message.id);
+          if (!handler) return;
+          pending.delete(message.id);
+          if (message.error) handler.reject(message.error);
+          else handler.resolve(message.result);
+          return;
+        }
+        if (message.method === "ui/notifications/tool-result") {
+          const initial = structured(message.params);
+          if (initial.dataMode) modeEl.textContent = initial.dataMode;
+          if (initial.view === "thread") $("#query").focus();
+        }
+      }, { passive: true });
+
+      const bridgeReady = (async () => {
+        await request("ui/initialize", {
+          appInfo: { name: "headlessdomains", version: "0.1.0" },
+          appCapabilities: {},
+          protocolVersion: "2026-01-26",
+        });
+        notify("ui/notifications/initialized", {});
+      })();
+
+      searchForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const query = $("#query").value.trim();
+        if (!query) return;
+        searchButton.disabled = true;
+        searchButton.textContent = "Checking…";
+        clear(detailsEl);
+        try {
+          const result = await callTool("check_availability", { query });
+          renderAvailability(result);
+          const exact = (result.matches || []).find((item) => item.name === query.toLowerCase());
+          if (exact && !exact.available) await inspectName(exact.name);
+        } catch (error) {
+          clear(availabilityEl);
+          availabilityEl.appendChild(text("div", `Search failed: ${error?.message || error}`, "card unavailable"));
+        } finally {
+          searchButton.disabled = false;
+          searchButton.textContent = "Check name";
+        }
+      });
+
+      searchTab.addEventListener("click", () => showView("search"));
+      portfolioTab.addEventListener("click", () => showView("portfolio"));
+    </script>
+  </body>
+</html>
+
