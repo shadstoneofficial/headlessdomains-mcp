@@ -7,10 +7,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install standard dependencies, plus FastAPI and Uvicorn for HTTP serving
-RUN pip install "mcp[cli]" requests fastapi uvicorn
+# Legacy MCP v1 runtime; the ChatGPT extension has a separate MCP v2 environment.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Read-only, localhost-only protocol check; never invokes business tools.
+RUN python scripts/smoke_legacy.py
 
 EXPOSE 8080
 

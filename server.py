@@ -296,6 +296,10 @@ def main() -> None:
         # we wrap the FastMCP app in a FastAPI app so we can serve a custom HTML root page.
         app = FastAPI(title="Headless Domains MCP")
 
+        @app.get("/healthz")
+        async def healthz():
+            return {"status": "ok", "service": "headlessdomains-mcp"}
+
         # Allow CORS for Smithery and other MCP registries
         app.add_middleware(
             CORSMiddleware,
