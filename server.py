@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
+from hosted_auth import HostedCredentialMiddleware, connection_key
 
 # Initialize the MCP Server
 mcp = FastMCP(
@@ -102,6 +103,12 @@ def _request_timeout() -> int:
 
 
 def _api_key() -> str:
+    key = connection_key.get()
+    if key is not None:
+        return key
+    # Hosted code must never fall back to a shared server credential.
+    if os.getenv("PORT") or os.getenv("MCP_TRANSPORT") == "sse":
+        return ""
     return os.getenv("HEADLESSDOMAINS_API_KEY", "").strip()
 
 
@@ -115,7 +122,7 @@ def _headers(require_api_key: bool = False) -> Dict[str, str]:
         headers["X-API-Key"] = api_key
     elif require_api_key:
         raise ValueError(
-            "HEADLESSDOMAINS_API_KEY is not set. Add it to your environment or Claude Desktop config."
+            "API key required. Hosted connections must send X-API-Key; local stdio may use HEADLESSDOMAINS_API_KEY."
         )
     return headers
 
@@ -143,25 +150,25 @@ def _request(
     json_body: Dict[str, Any] = None,
     require_api_key: bool = False,
 ) -> Any:
-    response = requests.request(
-        method=method,
-        url=f"{_api_base_url()}{path}",
-        params=params,
-        json=json_body,
-        headers=_headers(require_api_key=require_api_key),
-        timeout=_request_timeout(),
-    )
+    headers = _headers(require_api_key=require_api_key)
+    try:
+        response = requests.request(
+            method=method,
+            url=f"{_api_base_url()}{path}",
+            params=params,
+            json=json_body,
+            headers=headers,
+            timeout=_request_timeout(),
+        )
+    except requests.RequestException:
+        raise RuntimeError("Headless Domains API connection failed; no automatic retry was performed.") from None
 
     try:
         response.raise_for_status()
-    except requests.HTTPError as exc:
-        try:
-            details = response.json()
-        except ValueError:
-            details = {"message": response.text[:500]}
+    except requests.HTTPError:
         raise RuntimeError(
-            f"Headless Domains API request failed with status {response.status_code}: {details}"
-        ) from exc
+            f"Headless Domains API request failed with status {response.status_code}."
+        ) from None
 
     try:
         return response.json()
@@ -295,6 +302,7 @@ def main() -> None:
         # When running on Railway (or any hosted environment with a PORT),
         # we wrap the FastMCP app in a FastAPI app so we can serve a custom HTML root page.
         app = FastAPI(title="Headless Domains MCP")
+        app.add_middleware(HostedCredentialMiddleware)
 
         @app.get("/healthz")
         async def healthz():
@@ -343,7 +351,7 @@ def main() -> None:
                     <h3>1. Hosted Server (SSE) - 🌟 Recommended</h3>
                     <p>This is the cloud-hosted web server you are currently looking at! It is the best method for widespread adoption because modern agents (like Cursor, Windsurf, or web-based AI tools) can connect directly over the internet without users needing to download or install any Python code.</p>
                     <p><strong>Endpoint URL:</strong> <code>https://mcp.headlessdomains.com/sse</code></p>
-                    <p><em>Note: If the user wishes to register domains or sync bios, they must pass their <code>HEADLESSDOMAINS_API_KEY</code> as an environment variable or header when connecting their agent.</em></p>
+                    <p><em>Hosted registration and bio updates require your own <code>X-API-Key</code> header on both the SSE connection and message requests. Never put keys in URLs or shared defaults. Public discovery works without a key. The upstream API validates credentials and permissions for each operation.</em></p>
 
                     <h3>2. Local Process (stdio)</h3>
                     <p>The AI agent literally runs Python on the user's laptop to start the server locally in the background. This is currently required for <strong>Claude Desktop</strong>. It is secure, but requires the user to install Python and clone the GitHub repository.</p>
@@ -511,7 +519,8 @@ def main() -> None:
         app.mount("/", mcp_app)
 
         # Run the combined app
-        uvicorn.run(app, host="0.0.0.0", port=int(port))
+        # Do not log URLs: rejected credential query strings must not enter logs.
+        uvicorn.run(app, host="0.0.0.0", port=int(port), access_log=False)
         return
 
     # Fallback for local CLI usage (stdio)
