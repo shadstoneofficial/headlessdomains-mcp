@@ -1,5 +1,6 @@
 import json
 import os
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 import requests
@@ -13,6 +14,8 @@ from hosted_auth import HostedCredentialMiddleware, connection_key
 # Initialize the MCP Server
 mcp = FastMCP(
     "HeadlessDomains",
+    stateless_http=True,
+    json_response=True,
     instructions="Use this server to search for available .agent domains, look up WHOIS records for existing agent domains, and register new domains via MPP."
 )
 
@@ -301,7 +304,12 @@ def main() -> None:
     if port:
         # When running on Railway (or any hosted environment with a PORT),
         # we wrap the FastMCP app in a FastAPI app so we can serve a custom HTML root page.
-        app = FastAPI(title="Headless Domains MCP")
+        @asynccontextmanager
+        async def lifespan(app):
+            async with mcp.session_manager.run():
+                yield
+
+        app = FastAPI(title="Headless Domains MCP", lifespan=lifespan)
         app.add_middleware(HostedCredentialMiddleware)
 
         @app.get("/healthz")
@@ -515,6 +523,11 @@ def main() -> None:
             mcp.settings.transport_security.allowed_hosts = ["*"]
             mcp.settings.transport_security.allowed_origins = ["*"]
 
+        # Add modern HTTP without replacing existing SSE routes/discovery.
+        # Stateless requests retain their own credential context and cannot
+        # borrow credentials from a previous HTTP session.
+        http_app = mcp.streamable_http_app()
+        app.router.routes.extend(http_app.routes)
         mcp_app = mcp.sse_app()
         app.mount("/", mcp_app)
 

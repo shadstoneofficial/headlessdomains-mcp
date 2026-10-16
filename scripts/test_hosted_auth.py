@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import httpx
 from mcp import ClientSession
 from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 import server
 from hosted_auth import connection_key
 
@@ -42,10 +43,12 @@ class CredentialTests(unittest.TestCase):
 
 
 async def protocol_checks(base):
-    async def client(key):
+    async def client(key, transport="sse"):
         headers = {"X-API-Key": key} if key else {}
-        async with sse_client(base + "/sse", headers=headers) as streams:
-            async with ClientSession(*streams) as session:
+        connection = (sse_client(base + "/sse", headers=headers) if transport == "sse"
+                      else streamablehttp_client(base + "/mcp", headers=headers))
+        async with connection as streams:
+            async with ClientSession(*streams[:2]) as session:
                 await session.initialize()
                 assert len((await session.list_tools()).tools) == 4
                 # Mock fixture only: requests.request is replaced before server starts.
@@ -56,8 +59,13 @@ async def protocol_checks(base):
                 else:
                     assert "API key required" in body["error"], body
     await asyncio.gather(client("synthetic-A"), client("synthetic-B"), client(None))
+    await asyncio.gather(*(client(key, transport) for transport in ("sse", "http")
+                          for key in ("synthetic-A", "synthetic-B", None)))
     async with httpx.AsyncClient(base_url=base) as client_http:
         response = await client_http.get("/sse?HEADLESSDOMAINS_API_KEY=synthetic-query")
+        assert response.status_code == 400
+        assert "synthetic-query" not in response.text
+        response = await client_http.post("/mcp?api_key=synthetic-query", json={})
         assert response.status_code == 400
         assert "synthetic-query" not in response.text
         async with client_http.stream("GET", "/sse", headers={"X-API-Key": "synthetic-A"}) as stream:
